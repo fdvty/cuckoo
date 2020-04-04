@@ -57,14 +57,12 @@ private:
 
 public:
     Cuckoo(int capacity){
-        width[0] = 4;
-        width[1] = 4;
-        threshold = 35;
+        width[0] = 9;
+        width[1] = 3;
+        threshold = 30;
 
         size[0] = capacity * width[0] / (width[0] + width[1]);
         size[1] = capacity - size[0];
-        // size[0] = capacity/2;
-        // size[1] = capacity - size[0];
         
         for(int i = 0; i < 2; ++i){
             table[i] = new Cuckoo_entry[size[i]];
