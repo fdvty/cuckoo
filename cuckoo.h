@@ -10,9 +10,12 @@
 using namespace std;
 
 
+
 #define KEY_LEN 20
 #define VAL_LEN 10
 //#define MAX_HANG_LEN 
+
+
 
 struct Hash_entry;
 
@@ -115,7 +118,7 @@ public:
     }
 
     //newly added
-    bool search_the_hang(const char *key, char *value = NULL,int t=1,int position=-1){
+    bool search_the_hang(const char *key, int t=1,char *value = NULL,int position=-1){
         if (position == -1)
             position = hash_value(key, 1);
         
@@ -129,17 +132,18 @@ public:
             }
             current=current->hang;
         }
-        
+
+
         return false;
     }
 
     bool search(const char *key, char *value = NULL)
     {
-        if(search_table(key, 0, value) || search_table(key, 1, value))
+        if(search_table(key, 0, value))
             return true;
 
-        //newly added
-        if(search_the_hang(key,value))
+        int position_tmp=hash_value(key,1);
+        if(search_table(key, 1, value,position_tmp)||search_the_hang(key,1,value,position_tmp))
             return true;
         return false;
     }
@@ -180,18 +184,20 @@ public:
                 }
                 current=current->hang;
             }
-            current=new Cuckoo_entry();
+            table[t][position].hang = new Cuckoo_entry();
+            current=table[t][position].hang;
             current->flag = true;
             memcpy(current->key, e.key, KEY_LEN * sizeof(char));
             memcpy(current->value, e.value, VAL_LEN * sizeof(char));    
         }
         else{
-            Cuckoo_entry *p_tmp=current;
-            current=new Cuckoo_entry();
-            current->flag = true;
+            table[t][position].hang = new Cuckoo_entry();
+            table[t][position].hang->hang=current;
+            current = table[t][position].hang;
+            current->flag=true;
             memcpy(current->key, e.key, KEY_LEN * sizeof(char));
             memcpy(current->value, e.value, VAL_LEN * sizeof(char));
-            current->hang=p_tmp;
+            
         }
         
         return true;
@@ -215,7 +221,7 @@ public:
             e_insert = e_tmp;
         }
 
-        //newly added
+        
         hang_the_item(e_insert);
         
 
@@ -264,11 +270,11 @@ public:
         return false;
     }
     bool remove(const Hash_entry &e){
-        if(remove_table(e, 0) || remove_table(e, 1))
+        if(remove_table(e, 0))
             return true;
-
         //newly added
-        if(remove_the_hang(e)){
+        int position_tmp=hash_value(e.key,1);
+        if(remove_table(e,1,position_tmp)||remove_the_hang(e,1,position_tmp,0)){
             return true;
         }
         return false;
