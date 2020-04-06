@@ -5,12 +5,14 @@
 #include <cstring>
 #include <string>
 #include "BOBHash32.h"
+#include <cassert>
 
 using namespace std;
 
 
 #define KEY_LEN 20
 #define VAL_LEN 10
+//#define MAX_HANG_LEN 
 
 struct Hash_entry;
 
@@ -18,7 +20,13 @@ struct Cuckoo_entry{
     bool flag;
     char key[KEY_LEN];
     char value[VAL_LEN];
-
+    Cuckoo_entry *hang;//the hanging items
+    Cuckoo_entry(){
+        //flag=false;
+        //memset(key,0, KEY_LEN*sizeof(char));
+        //memset(value,0,VAL_LEN*sizeof(char));
+        hang=NULL;
+    }
     Cuckoo_entry& operator=(const Hash_entry& e);
 };
 
@@ -48,12 +56,12 @@ Cuckoo_entry& Cuckoo_entry::operator=(const Hash_entry& e){
 
 class Cuckoo{
 private:
-    Cuckoo_entry *table[2];
-    int size[2];
-    int width[2];
-    int threshold;
+    Cuckoo_entry *table[2]; //
+    int size[2];            //
+    int width[2];           //how many in this one
+    int threshold;          //maybe the kickout threshold?
 
-    BOBHash32 bobhash[2];
+    BOBHash32 bobhash[2];   //
 
 public:
     Cuckoo(int capacity){
@@ -61,15 +69,17 @@ public:
         width[1] = 3;
         threshold = 30;
 
-        size[0] = capacity * width[0] / (width[0] + width[1]);
-        size[1] = capacity - size[0];
+        size[0] = capacity * width[0] / (width[0] + width[1]);  //
+        size[1] = capacity - size[0];                           //
         
+        //initializing and apportion
         for(int i = 0; i < 2; ++i){
             table[i] = new Cuckoo_entry[size[i]];
             for(int j = 0; j < size[i]; ++j)
                 table[i][j].flag = 0;
         }
 
+        //
         for(int i = 0; i < 2; ++i){
             uint32_t seed = rand()%MAX_PRIME32;
             bobhash[i].initialize(seed);
@@ -81,32 +91,64 @@ public:
             delete [] table[i];
     }
 
+    //get the hash of key   
+    //@para: t is the s 
     int hash_value(const char* key, int t){
         return bobhash[t].run(key, KEY_LEN*sizeof(char)) % size[t];
     }
 
+    
     bool search_table(const char* key, int t, char* value, int position = -1){
         assert(t == 0 || t == 1);
         if(position == -1)
             position = hash_value(key, t);
         for(int i = position; i < position + width[t]; ++i)
+
+            //get the wanted item
             if(table[t][i].flag && memcmp(table[t][i].key, key, KEY_LEN*sizeof(char)) == 0){
                 if(value != NULL)
                     memcpy(value, table[t][i].value, VAL_LEN*sizeof(char));
                 return true;
             }
+        
         return false;
     }
 
-    bool search(const char* key, char* value = NULL){
+    //newly added
+    bool search_the_hang(const char *key, char *value = NULL,int t=1,int position=-1){
+        if (position == -1)
+            position = hash_value(key, 1);
+        
+        Cuckoo_entry *current=table[t][position].hang;
+
+        while(current){
+            if (current->flag && memcmp(current->key, key, KEY_LEN * sizeof(char)) == 0){
+                if (value != NULL)
+                    memcpy(value, current->value, VAL_LEN * sizeof(char));
+                return true;
+            }
+            current=current->hang;
+        }
+        
+        return false;
+    }
+
+    bool search(const char *key, char *value = NULL)
+    {
         if(search_table(key, 0, value) || search_table(key, 1, value))
+            return true;
+
+        //newly added
+        if(search_the_hang(key,value))
             return true;
         return false;
     }
 
+  
     bool insert_table(const Hash_entry &e, int t, int position = -1){
         if(position == -1)
-            position = hash_value(e.key, t);
+            position = hash_value(e.key, t);//compute the address
+
         for(int i = position; i < position + width[t]; ++i)
             if(!table[t][i].flag){
                 table[t][i].flag = true;
@@ -114,7 +156,45 @@ public:
                 memcpy(table[t][i].value, e.value, VAL_LEN*sizeof(char));
                 return true;
             }
+
         return false;
+    }
+
+    //newly added
+    //method 0 implies that we just insert to the rear,but once if we have vacancies,we fill it
+    //method 1 is from the front
+    bool hang_the_item(const Hash_entry &e,int t=1,int position =-1,int method=0){
+        if(position==-1)
+            position=hash_value(e.key,t);
+        assert(method == 0 || method == 1);
+
+        Cuckoo_entry *current = table[t][position].hang;
+        
+        if(method==0||current==NULL){
+            while(current){
+                if(current->flag==false){
+                    current->flag = true;
+                    memcpy(current->key, e.key, KEY_LEN * sizeof(char));
+                    memcpy(current->value, e.value, VAL_LEN * sizeof(char));
+                    return true;
+                }
+                current=current->hang;
+            }
+            current=new Cuckoo_entry();
+            current->flag = true;
+            memcpy(current->key, e.key, KEY_LEN * sizeof(char));
+            memcpy(current->value, e.value, VAL_LEN * sizeof(char));    
+        }
+        else{
+            Cuckoo_entry *p_tmp=current;
+            current=new Cuckoo_entry();
+            current->flag = true;
+            memcpy(current->key, e.key, KEY_LEN * sizeof(char));
+            memcpy(current->value, e.value, VAL_LEN * sizeof(char));
+            current->hang=p_tmp;
+        }
+        
+        return true;
     }
 
     bool insert(const Hash_entry &e){
@@ -123,6 +203,8 @@ public:
         int h[2];
         Hash_entry e_insert = e;
         Hash_entry e_tmp;
+
+       
         for(int k = 0; k < threshold; ++k){
             int t = k%2;
             h[t] = hash_value(e_insert.key, t);
@@ -132,6 +214,11 @@ public:
             table[t][h[t]] = e_insert;
             e_insert = e_tmp;
         }
+
+        //newly added
+        hang_the_item(e_insert);
+        
+
         return false;
     }
 
@@ -146,9 +233,44 @@ public:
         return false;
     }
 
+    //newly added
+    //method 0 simply switches the flag form positive to negative
+    //method 1 frees the space that is useless
+    bool remove_the_hang(const Hash_entry&e,int t=1,int position=-1,int method=0){
+        if(position==-1){
+            position=hash_value(e.key,t);
+        }
+        assert(method==0||method==1);
+
+        Cuckoo_entry *current = table[t][position].hang;
+        Cuckoo_entry *tmp = &table[t][position];
+        while (current)
+        {
+            if (current->flag && memcmp(current->key, e.key, KEY_LEN * sizeof(char)) == 0)
+            {
+                if(method==0){
+                    current->flag = false;
+                    return true;
+                }
+                else{
+                    tmp->hang=current->hang;
+                    delete current;
+                    return true;
+                }
+            }
+            tmp=current;
+            current = current->hang;
+        }
+        return false;
+    }
     bool remove(const Hash_entry &e){
         if(remove_table(e, 0) || remove_table(e, 1))
             return true;
+
+        //newly added
+        if(remove_the_hang(e)){
+            return true;
+        }
         return false;
     }
 };
