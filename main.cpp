@@ -6,6 +6,54 @@
 
 const int CUCKOO_SIZE = KV_NUM;
 
+// #define TEST_CUCKOO
+#ifdef TEST_CUCKOO
+int main(){
+    Cuckoo cuckoo(CUCKOO_SIZE);
+    create_kv();
+    int count_fail = 0;
+    int stop = 0;
+
+
+    bool flag = 0;
+    int tmp = 0;
+    int FAIL_STOP = 200;
+
+    for(int i = 0; i < KV_NUM; ++i){
+        if(cuckoo.insert(kv[i]) == false)
+            if(++count_fail == FAIL_STOP){
+                stop = i;
+                break;
+            }
+    }
+    printf("insert stop at %d\n", stop);
+    for(int i = 0; i < KV_NUM; ++i){
+        if(cuckoo.search(kv[i].key) == false){
+            stop = i;
+            break;
+        }
+    }
+    printf("search stop at %d\n", stop);
+    for(int i = stop; i >= stop-10; --i){
+        if(cuckoo.remove(kv[i].key) == false){
+            printf("remove fail at %d\n", i);
+        }
+    }
+    for(int i = 0; i < KV_NUM; ++i){
+        if(cuckoo.search(kv[i].key) == false){
+            stop = i;
+            break;
+        }
+    }
+    printf("search stop at %d\n", stop);
+
+
+
+    return 0;
+}
+
+
+#else
 int main(){
     Cuckoo cuckoo(CUCKOO_SIZE);
 
@@ -55,7 +103,8 @@ int main(){
     printf("\nstop: %d, cntSearchFail: %d\n", stop, cntSearchFail);
     printf("hash table size: %d, inserted item: %d\n", CUCKOO_SIZE, stop);
     printf("load factor: %lf, insert MIPS: %lf, query MIPS: %lf\n", loadFactor, insertMips, queryMips);
-
+    // printf("max link: %d\n", cuckoo.max_link_length());
 
     return 0;
 }
+#endif

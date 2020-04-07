@@ -13,9 +13,6 @@ using namespace std;
 
 #define KEY_LEN 20
 #define VAL_LEN 10
-//#define MAX_HANG_LEN 
-
-
 
 struct Hash_entry;
 
@@ -23,12 +20,11 @@ struct Cuckoo_entry{
     bool flag;
     char key[KEY_LEN];
     char value[VAL_LEN];
-    Cuckoo_entry *hang;//the hanging items
+    Cuckoo_entry *hang; //the hanging items
+
     Cuckoo_entry(){
-        //flag=false;
-        //memset(key,0, KEY_LEN*sizeof(char));
-        //memset(value,0,VAL_LEN*sizeof(char));
-        hang=NULL;
+        flag = false;
+        hang = NULL;
     }
     Cuckoo_entry& operator=(const Hash_entry& e);
 };
@@ -90,23 +86,29 @@ public:
     }
 
     ~Cuckoo(){
+        for(int i = 0; i < size[1]; ++i){
+            Cuckoo_entry* tmp = table[1][i].hang;
+            Cuckoo_entry* next;
+            while(tmp){
+                next = tmp->hang;
+                delete tmp;
+                tmp = next;
+            }
+        }
         for(int i = 0; i < 2; ++i)
             delete [] table[i];
     }
 
-    //get the hash of key   
-    //@para: t is the s 
+
+private:
     int hash_value(const char* key, int t){
         return bobhash[t].run(key, KEY_LEN*sizeof(char)) % size[t];
     }
 
-    
     bool search_table(const char* key, int t, char* value, int position = -1){
-        assert(t == 0 || t == 1);
         if(position == -1)
             position = hash_value(key, t);
         for(int i = position; i < position + width[t]; ++i)
-
             //get the wanted item
             if(table[t][i].flag && memcmp(table[t][i].key, key, KEY_LEN*sizeof(char)) == 0){
                 if(value != NULL)
@@ -118,37 +120,24 @@ public:
     }
 
     //newly added
-    bool search_the_hang(const char *key, int t=1,char *value = NULL,int position=-1){
+    bool search_the_hang(const char *key, int t=1,char *value = NULL,int position = -1){
         if (position == -1)
             position = hash_value(key, 1);
         
-        Cuckoo_entry *current=table[t][position].hang;
+        Cuckoo_entry *current = table[t][position].hang;
 
         while(current){
-            if (current->flag && memcmp(current->key, key, KEY_LEN * sizeof(char)) == 0){
+            // assert(current->flag);
+            if (memcmp(current->key, key, KEY_LEN * sizeof(char)) == 0){
                 if (value != NULL)
                     memcpy(value, current->value, VAL_LEN * sizeof(char));
                 return true;
             }
-            current=current->hang;
+            current = current->hang;
         }
-
-
         return false;
     }
 
-    bool search(const char *key, char *value = NULL)
-    {
-        if(search_table(key, 0, value))
-            return true;
-
-        int position_tmp=hash_value(key,1);
-        if(search_table(key, 1, value,position_tmp)||search_the_hang(key,1,value,position_tmp))
-            return true;
-        return false;
-    }
-
-  
     bool insert_table(const Hash_entry &e, int t, int position = -1){
         if(position == -1)
             position = hash_value(e.key, t);//compute the address
@@ -165,42 +154,60 @@ public:
     }
 
     //newly added
-    //method 0 implies that we just insert to the rear,but once if we have vacancies,we fill it
-    //method 1 is from the front
-    bool hang_the_item(const Hash_entry &e,int t=1,int position =-1,int method=0){
+    void hang_the_item(const Hash_entry &e, int t = 1, int position = -1){
+        if(position == -1)
+            position = hash_value(e.key, t);
+        
+        Cuckoo_entry *next = table[t][position].hang;
+        table[t][position].hang = new Cuckoo_entry();
+        Cuckoo_entry *current = table[t][position].hang;
+        current->flag = true;
+        current->hang = next;
+        memcpy(current->key, e.key, KEY_LEN * sizeof(char));
+        memcpy(current->value, e.value, VAL_LEN * sizeof(char));      
+    }
+    
+    bool remove_table(const char *key, int t, int position = -1){
+        if(position == -1)
+            position = hash_value(key, t);
+        for(int i = position; i < position + width[t]; ++i)
+            if(table[t][i].flag && memcmp(table[t][i].key, key, KEY_LEN*sizeof(char)) == 0){
+                table[t][i].flag = false;
+                return true;
+            }
+        return false;
+    }
+
+    //newly added
+    bool remove_the_hang(const char* key, int t=1, int position=-1){
         if(position==-1)
-            position=hash_value(e.key,t);
-        assert(method == 0 || method == 1);
+            position=hash_value(key,t);
 
         Cuckoo_entry *current = table[t][position].hang;
-        
-        if(method==0||current==NULL){
-            while(current){
-                if(current->flag==false){
-                    current->flag = true;
-                    memcpy(current->key, e.key, KEY_LEN * sizeof(char));
-                    memcpy(current->value, e.value, VAL_LEN * sizeof(char));
-                    return true;
-                }
-                current=current->hang;
+        Cuckoo_entry *prev = &table[t][position];
+        while (current){
+            // assert(prev->hang == current);
+            // assert(current->flag);
+            if (memcmp(current->key, key, KEY_LEN * sizeof(char)) == 0){
+                prev->hang = current->hang;
+                delete current;
+                return true;
             }
-            table[t][position].hang = new Cuckoo_entry();
-            current=table[t][position].hang;
-            current->flag = true;
-            memcpy(current->key, e.key, KEY_LEN * sizeof(char));
-            memcpy(current->value, e.value, VAL_LEN * sizeof(char));    
+            prev = current;
+            current = current->hang;
         }
-        else{
-            table[t][position].hang = new Cuckoo_entry();
-            table[t][position].hang->hang=current;
-            current = table[t][position].hang;
-            current->flag=true;
-            memcpy(current->key, e.key, KEY_LEN * sizeof(char));
-            memcpy(current->value, e.value, VAL_LEN * sizeof(char));
-            
-        }
-        
-        return true;
+        return false;
+    }
+
+public:
+    bool search(const char *key, char *value = NULL){
+        if(search_table(key, 0, value))
+            return true;
+
+        int position_tmp = hash_value(key,1);
+        if(search_table(key, 1, value, position_tmp) || search_the_hang(key, 1, value, position_tmp))
+            return true;
+        return false;
     }
 
     bool insert(const Hash_entry &e){
@@ -210,7 +217,6 @@ public:
         Hash_entry e_insert = e;
         Hash_entry e_tmp;
 
-       
         for(int k = 0; k < threshold; ++k){
             int t = k%2;
             h[t] = hash_value(e_insert.key, t);
@@ -219,66 +225,37 @@ public:
             e_tmp = table[t][h[t]];
             table[t][h[t]] = e_insert;
             e_insert = e_tmp;
-        }
-
-        
-        hang_the_item(e_insert);
-        
-
+        }    
+        hang_the_item(e_insert, 1);
         return false;
     }
 
-    bool remove_table(const Hash_entry &e, int t, int position = -1){
-        if(position == -1)
-            position = hash_value(e.key, t);
-        for(int i = position; i < position + width[t]; ++i)
-            if(table[t][i].flag && memcmp(table[t][i].key, e.key, KEY_LEN*sizeof(char)) == 0){
-                table[t][i].flag = false;
-                return true;
-            }
-        return false;
-    }
-
-    //newly added
-    //method 0 simply switches the flag form positive to negative
-    //method 1 frees the space that is useless
-    bool remove_the_hang(const Hash_entry&e,int t=1,int position=-1,int method=0){
-        if(position==-1){
-            position=hash_value(e.key,t);
-        }
-        assert(method==0||method==1);
-
-        Cuckoo_entry *current = table[t][position].hang;
-        Cuckoo_entry *tmp = &table[t][position];
-        while (current)
-        {
-            if (current->flag && memcmp(current->key, e.key, KEY_LEN * sizeof(char)) == 0)
-            {
-                if(method==0){
-                    current->flag = false;
-                    return true;
-                }
-                else{
-                    tmp->hang=current->hang;
-                    delete current;
-                    return true;
-                }
-            }
-            tmp=current;
-            current = current->hang;
-        }
-        return false;
-    }
-    bool remove(const Hash_entry &e){
-        if(remove_table(e, 0))
+    bool remove(const char* key){
+        if(remove_table(key, 0))
             return true;
         //newly added
-        int position_tmp=hash_value(e.key,1);
-        if(remove_table(e,1,position_tmp)||remove_the_hang(e,1,position_tmp,0)){
+        int position_tmp = hash_value(key, 1);
+        if(remove_table(key, 1, position_tmp) || remove_the_hang(key, 1, position_tmp))
             return true;
-        }
         return false;
     }
+
+// below are debug functions
+public:
+    int max_link_length(){
+        int ret = 0;
+        for(int i = 0; i < size[1]; ++i){
+            int len = 0;
+            Cuckoo_entry *current = table[1][i].hang;
+            while(current){
+                len++;
+                current = current->hang;
+            }
+            if(len > ret) ret = len;
+        }
+        return ret;
+    }
+
 };
 
 
