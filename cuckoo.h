@@ -255,6 +255,19 @@ public:
         }
         return ret;
     }
+    int total_link_length(){
+        int ret = 0;
+        for(int i = 0; i < size[1]; ++i){
+            int len = 0;
+            Cuckoo_entry *current = table[1][i].hang;
+            while(current){
+                len++;
+                current = current->hang;
+            }
+            ret += len;
+        }
+        return ret;
+    }
 
 };
 

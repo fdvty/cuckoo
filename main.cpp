@@ -59,7 +59,7 @@ int main(){
 
     create_kv();
     int count_fail = 0;
-    int stop = 0;
+    int stop = KV_NUM;
 
     timespec time1, time2;
     long long resns = 0;
@@ -100,10 +100,13 @@ int main(){
     double queryMips = (double)1000.0 * stop / resns; // calculate time
 
     // assert(cntSearchFail == FAIL_STOP);
-    printf("\nstop: %d, cntSearchFail: %d\n", stop, cntSearchFail);
+    printf("\n-----------------------result-----------------------\n");
     printf("hash table size: %d, inserted item: %d\n", CUCKOO_SIZE, stop);
     printf("load factor: %lf, insert MIPS: %lf, query MIPS: %lf\n", loadFactor, insertMips, queryMips);
-    // printf("max link: %d\n", cuckoo.max_link_length());
+
+    printf("\n-----------------------debug-----------------------\n");
+    printf("stop: %d, cntSearchFail: %d\n", stop, cntSearchFail);
+    printf("max link: %d, total link: %d\n", cuckoo.max_link_length(), cuckoo.total_link_length());
 
     return 0;
 }
