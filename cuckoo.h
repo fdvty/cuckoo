@@ -172,28 +172,31 @@ public:
             position=hash_value(e.key,t);
         assert(method == 0 || method == 1);
 
-        Cuckoo_entry *current = table[t][position].hang;
+        Cuckoo_entry *current = &table[t][position];
         
-        if(method==0||current==NULL){
-            while(current){
+        if(method==0||current->hang==NULL){
+            while(current->hang){
+                current=current->hang;
                 if(current->flag==false){
                     current->flag = true;
                     memcpy(current->key, e.key, KEY_LEN * sizeof(char));
                     memcpy(current->value, e.value, VAL_LEN * sizeof(char));
                     return true;
                 }
-                current=current->hang;
+                
             }
-            table[t][position].hang = new Cuckoo_entry();
-            current=table[t][position].hang;
+            
+            current->hang = new Cuckoo_entry();
+            current=current->hang;
             current->flag = true;
             memcpy(current->key, e.key, KEY_LEN * sizeof(char));
             memcpy(current->value, e.value, VAL_LEN * sizeof(char));    
         }
         else{
-            table[t][position].hang = new Cuckoo_entry();
-            table[t][position].hang->hang=current;
-            current = table[t][position].hang;
+            Cuckoo_entry*p_tmp=current->hang;
+            current->hang = new Cuckoo_entry();
+            current = current->hang;
+            current->hang=p_tmp;
             current->flag=true;
             memcpy(current->key, e.key, KEY_LEN * sizeof(char));
             memcpy(current->value, e.value, VAL_LEN * sizeof(char));
