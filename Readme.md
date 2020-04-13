@@ -1,4 +1,4 @@
-# Linear Probing Cuckoo Hashing (LPCH) 华为哈希表
+# Linear Probing Cuckoo Hashing (LPCH) 华为哈希
 
 ---
 
