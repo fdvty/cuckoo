@@ -120,7 +120,7 @@ private:
     }
 
     //newly added
-    bool search_the_hang(const char *key, int t=1,char *value = NULL,int position = -1){
+    bool search_list(const char *key, int t=1,char *value = NULL,int position = -1){
         if (position == -1)
             position = hash_value(key, 1);
         
@@ -179,7 +179,7 @@ private:
     }
 
     //newly added
-    bool remove_the_hang(const char* key, int t=1, int position=-1){
+    bool remove_list(const char* key, int t=1, int position=-1){
         if(position==-1)
             position=hash_value(key,t);
 
@@ -205,7 +205,7 @@ public:
             return true;
 
         int position_tmp = hash_value(key,1);
-        if(search_table(key, 1, value, position_tmp) || search_the_hang(key, 1, value, position_tmp))
+        if(search_table(key, 1, value, position_tmp) || search_list(key, 1, value, position_tmp))
             return true;
         return false;
     }
@@ -235,7 +235,7 @@ public:
             return true;
         //newly added
         int position_tmp = hash_value(key, 1);
-        if(remove_table(key, 1, position_tmp) || remove_the_hang(key, 1, position_tmp))
+        if(remove_table(key, 1, position_tmp) || remove_list(key, 1, position_tmp))
             return true;
         return false;
     }
