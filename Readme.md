@@ -43,7 +43,7 @@ LPCH是一个用来管理大量Key-Value Pairs的哈希表，它的装载率可�
 
 内存 16 GB 1600 MHz DDR3
 
-L2缓存 256 KB， L3缓存 6 MB
+L2缓存 256 KB（每个核）， L3缓存 6 MB
 
 操作系统 macOS Mojave 10.14.6
 
@@ -71,13 +71,53 @@ load factor: 0.916482, insert MIPS: 1.959996, query MIPS: 5.604952
 
 load factor: 0.915468, insert MIPS: 1.943140, query MIPS: 5.339390
 
-load factor: 0.914829, insert MIPS: 1.927954, query MIPS: 5.711250
+load factor: 0.915421, insert MIPS: 1.860296, query MIPS: 5.223931
 
 load factor: 0.916446, insert MIPS: 1.988155, query MIPS: 5.688728
 
 load factor: 0.915661, insert MIPS: 1.966910, query MIPS: 5.653916
 
-load factor: 0.915409, insert MIPS: 1.897667, query MIPS: 5.579936
+load factor: 0.916195, insert MIPS: 1.972375, query MIPS: 5.831145
+
+### 实验2 
+
+#### 实验平台
+
+处理器 2.5GHz Intel Core i5-7300HQ
+
+内存 8 GB 2400MHz
+
+L1缓存 256KB L2缓存 1.0MB L3缓存 6.0MB
+
+操作系统 Windows 10 专业版 版本1909
+
+#### 数据集及哈希表配置
+
+同上
+
+#### 实验结果
+
+下面是上述配置下运行10次的实验结果，插入速度和查询速度用MIPS（每秒百万次操作）度量。
+
+load factor: 0.916538, insert MIPS: 1.947818, query MIPS: 5.232890
+
+load factor: 0.915262, insert MIPS: 1.970920, query MIPS: 5.231077
+
+load factor: 0.914738, insert MIPS: 1.944192, query MIPS: 5.246414
+
+load factor: 0.916294, insert MIPS: 1.804112, query MIPS: 5.191138
+
+load factor: 0.915608, insert MIPS: 1.936188, query MIPS: 5.321218
+
+load factor: 0.916008, insert MIPS: 1.927048, query MIPS: 5.220351
+
+load factor: 0.915777, insert MIPS: 1.837273, query MIPS: 5.255201
+
+load factor: 0.915627, insert MIPS: 1.954213, query MIPS: 5.196590
+
+load factor: 0.916004, insert MIPS: 1.855996, query MIPS: 5.150721
+
+load factor: 0.916252, insert MIPS: 1.951743, query MIPS: 5.137305
 
 ## 运行说明
 

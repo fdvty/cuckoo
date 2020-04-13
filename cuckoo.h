@@ -57,8 +57,8 @@ class Cuckoo{
 private:
     Cuckoo_entry *table[2]; //
     int size[2];            //
-    int width[2];           //how many in this one
-    int threshold;          //maybe the kickout threshold?
+    int width[2];           //
+    int threshold;          //
 
     BOBHash32 bobhash[2];   //
 
@@ -109,7 +109,6 @@ private:
         if(position == -1)
             position = hash_value(key, t);
         for(int i = position; i < position + width[t]; ++i)
-            //get the wanted item
             if(table[t][i].flag && memcmp(table[t][i].key, key, KEY_LEN*sizeof(char)) == 0){
                 if(value != NULL)
                     memcpy(value, table[t][i].value, VAL_LEN*sizeof(char));
@@ -119,7 +118,6 @@ private:
         return false;
     }
 
-    //newly added
     bool search_list(const char *key, int t=1,char *value = NULL,int position = -1){
         if (position == -1)
             position = hash_value(key, 1);
@@ -140,7 +138,7 @@ private:
 
     bool insert_table(const Hash_entry &e, int t, int position = -1){
         if(position == -1)
-            position = hash_value(e.key, t);//compute the address
+            position = hash_value(e.key, t);
 
         for(int i = position; i < position + width[t]; ++i)
             if(!table[t][i].flag){
@@ -153,7 +151,7 @@ private:
         return false;
     }
 
-    //newly added
+
     void hang_the_item(const Hash_entry &e, int t = 1, int position = -1){
         if(position == -1)
             position = hash_value(e.key, t);
@@ -178,7 +176,6 @@ private:
         return false;
     }
 
-    //newly added
     bool remove_list(const char* key, int t=1, int position=-1){
         if(position==-1)
             position=hash_value(key,t);
@@ -233,7 +230,6 @@ public:
     bool remove(const char* key){
         if(remove_table(key, 0))
             return true;
-        //newly added
         int position_tmp = hash_value(key, 1);
         if(remove_table(key, 1, position_tmp) || remove_list(key, 1, position_tmp))
             return true;
