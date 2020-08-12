@@ -3,6 +3,7 @@
 
 #include "utils.h"
 
+#define TEST_CUCKOO
 
 const int CUCKOO_SIZE = KV_NUM;
 
@@ -17,8 +18,12 @@ int main(){
 
     bool flag = 0;
     int tmp = 0;
-    int FAIL_STOP = 200;
+    int FAIL_STOP = 8;
 
+    timespec time1, time2;
+    long long resns = 0;
+
+    clock_gettime(CLOCK_MONOTONIC, &time1);
     for(int i = 0; i < KV_NUM; ++i){
         if(cuckoo.insert(kv[i]) == false)
             if(++count_fail == FAIL_STOP){
@@ -26,26 +31,28 @@ int main(){
                 break;
             }
     }
+    clock_gettime(CLOCK_MONOTONIC, &time2);
+    resns = (long long)(time2.tv_sec - time1.tv_sec) * 1000000000LL + (time2.tv_nsec - time1.tv_nsec); 
+    double insertMips = (double)1000.0 * (stop) / resns; 
     printf("insert stop at %d\n", stop);
+    printf("insertion speed: %lf\n", insertMips);
+    printf("load factor %lf\n", (double)stop/CUCKOO_SIZE);
+
+
+
+    clock_gettime(CLOCK_MONOTONIC, &time1);
     for(int i = 0; i < KV_NUM; ++i){
         if(cuckoo.search(kv[i].key) == false){
             stop = i;
             break;
         }
     }
+    clock_gettime(CLOCK_MONOTONIC, &time2);
+    resns = (long long)(time2.tv_sec - time1.tv_sec) * 1000000000LL + (time2.tv_nsec - time1.tv_nsec); 
+    double queryMips = (double)1000.0 * (stop) / resns; 
+
     printf("search stop at %d\n", stop);
-    for(int i = stop; i >= stop-10; --i){
-        if(cuckoo.remove(kv[i].key) == false){
-            printf("remove fail at %d\n", i);
-        }
-    }
-    for(int i = 0; i < KV_NUM; ++i){
-        if(cuckoo.search(kv[i].key) == false){
-            stop = i;
-            break;
-        }
-    }
-    printf("search stop at %d\n", stop);
+    printf("search speed: %lf\n", queryMips);
 
 
 

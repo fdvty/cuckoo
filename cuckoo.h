@@ -64,8 +64,8 @@ private:
 
 public:
     Cuckoo(int capacity){
-        width[0] = 9;
-        width[1] = 3;
+        width[0] = 1;
+        width[1] = 1;
         threshold = 30;
 
         size[0] = capacity * width[0] / (width[0] + width[1]);  //
@@ -223,7 +223,7 @@ public:
             table[t][h[t]] = e_insert;
             e_insert = e_tmp;
         }    
-        hang_the_item(e_insert, 1);
+        // hang_the_item(e_insert, 1);
         return false;
     }
 
