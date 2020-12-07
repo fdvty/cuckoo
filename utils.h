@@ -11,9 +11,15 @@ inline void random_string(char* str, const int len){
 }
 
 void create_kv(){
-    srand((uint)time(0));
+    srand((uint32_t)time(0));
     for(int i = 0; i < KV_NUM; ++i){
-        random_string(kv[i].key, KEY_LEN);
+        int t = i%(KV_NUM*95/100);
+        // int t = i;
+        if(KEY_LEN == 4)
+            memcpy(kv[i].key, (const char*)&t, sizeof(char)*KEY_LEN);
+            // kv[i].key = *(const char*)(&i);
+        else
+            random_string(kv[i].key, KEY_LEN);
         random_string(kv[i].value, VAL_LEN);
     }
 }

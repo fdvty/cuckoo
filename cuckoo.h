@@ -4,27 +4,33 @@
 #include <algorithm>
 #include <cstring>
 #include <string>
-#include "BOBHash32.h"
+#include "murmur3.h"
 #include <cassert>
+#include "immintrin.h"
 
 using namespace std;
 
 
 
-#define KEY_LEN 20
-#define VAL_LEN 10
+#define KEY_LEN 4
+#define VAL_LEN 8
 
 struct Hash_entry;
 
 struct Cuckoo_entry{
-    bool flag;
     char key[KEY_LEN];
     char value[VAL_LEN];
+    bool flag;
+
+#ifdef _HANG_LINK
     Cuckoo_entry *hang; //the hanging items
+#endif 
 
     Cuckoo_entry(){
         flag = false;
+#ifdef _HANG_LINK
         hang = NULL;
+#endif
     }
     Cuckoo_entry& operator=(const Hash_entry& e);
 };
@@ -55,37 +61,36 @@ Cuckoo_entry& Cuckoo_entry::operator=(const Hash_entry& e){
 
 class Cuckoo{
 private:
-    Cuckoo_entry *table[2]; //
-    int size[2];            //
-    int width[2];           //
-    int threshold;          //
+    Cuckoo_entry *table[2]; 
+    int size[2];            
+    int width[2];           
+    int threshold;          
 
-    BOBHash32 bobhash[2];   //
+    uint32_t hashseed[2];
 
 public:
     Cuckoo(int capacity){
-        width[0] = 1;
-        width[1] = 1;
-        threshold = 30;
+        width[0] = 8;
+        width[1] = 8;
+        threshold = 15;
 
-        size[0] = capacity * width[0] / (width[0] + width[1]);  //
-        size[1] = capacity - size[0];                           //
+        size[0] = capacity * 2.25 / (2.25 + 1);  
+        size[1] = capacity - size[0];                           
         
-        //initializing and apportion
+        // initialize two sub-tables
         for(int i = 0; i < 2; ++i){
             table[i] = new Cuckoo_entry[size[i]];
-            for(int j = 0; j < size[i]; ++j)
-                table[i][j].flag = 0;
+            memset(table[i], 0, sizeof(Cuckoo_entry)*size[i]);
         }
-
-        //
+        // initialize hash funcitons
         for(int i = 0; i < 2; ++i){
             uint32_t seed = rand()%MAX_PRIME32;
-            bobhash[i].initialize(seed);
+            hashseed[i] = seed;
         }
     }
 
     ~Cuckoo(){
+#ifdef _HANG_LINK
         for(int i = 0; i < size[1]; ++i){
             Cuckoo_entry* tmp = table[1][i].hang;
             Cuckoo_entry* next;
@@ -95,6 +100,7 @@ public:
                 tmp = next;
             }
         }
+#endif
         for(int i = 0; i < 2; ++i)
             delete [] table[i];
     }
@@ -102,14 +108,41 @@ public:
 
 private:
     int hash_value(const char* key, int t){
-        return bobhash[t].run(key, KEY_LEN*sizeof(char)) % size[t];
+        return MurmurHash3_x86_32(key, KEY_LEN, hashseed[t]) % size[t];
     }
 
-    bool search_table(const char* key, int t, char* value, int position = -1){
+    bool search_table(const char* key, int t, char* value, int position = -1, const char* cover_value = NULL){
         if(position == -1)
             position = hash_value(key, t);
+
+        // __attribute__((aligned(32))) char *tmp = new char[KEY_LEN*width[0]];
+        // for(int i = 0; i < width[t]; ++i)
+        //     memcpy(tmp+KEY_LEN*i, table[t][i+position].key, KEY_LEN*sizeof(char));
+        
+        // const __m256i item = _mm256_set1_epi32(*(int*)key);
+        // __m256i *keys_p = (__m256i *)(tmp);
+        // int matched = 0;
+
+        // __m256i a_comp = _mm256_cmpeq_epi32(item, keys_p[0]);
+        // matched = _mm256_movemask_ps((__m256)a_comp);
+
+        // if(matched != 0){
+        //     int matched_lowbit = matched & (-matched);
+        //     int matched_index = _mm_tzcnt_32((uint32_t)matched_lowbit);
+        //     if(cover_value != NULL)
+        //         memcpy(table[t][matched_index].value, cover_value, VAL_LEN*sizeof(char));
+        //     if(value != NULL)
+        //         memcpy(value, table[t][matched_index].value, VAL_LEN*sizeof(char));
+        //     return true;
+        // }
+
+        // return false;
+
+
         for(int i = position; i < position + width[t]; ++i)
             if(table[t][i].flag && memcmp(table[t][i].key, key, KEY_LEN*sizeof(char)) == 0){
+                if(cover_value != NULL)
+                    memcpy(table[t][i].value, cover_value, VAL_LEN*sizeof(char));
                 if(value != NULL)
                     memcpy(value, table[t][i].value, VAL_LEN*sizeof(char));
                 return true;
@@ -118,7 +151,8 @@ private:
         return false;
     }
 
-    bool search_list(const char *key, int t=1,char *value = NULL,int position = -1){
+#ifdef _HANG_LINK
+    bool search_list(const char *key, int t=1,char *value = NULL,int position = -1, const char* cover_value = NULL){
         if (position == -1)
             position = hash_value(key, 1);
         
@@ -127,7 +161,9 @@ private:
         while(current){
             // assert(current->flag);
             if (memcmp(current->key, key, KEY_LEN * sizeof(char)) == 0){
-                if (value != NULL)
+                if(cover_value != NULL)
+                    memcpy(current->value, cover_value, VAL_LEN *sizeof(char));
+                if(value != NULL)
                     memcpy(value, current->value, VAL_LEN * sizeof(char));
                 return true;
             }
@@ -135,6 +171,7 @@ private:
         }
         return false;
     }
+#endif
 
     bool insert_table(const Hash_entry &e, int t, int position = -1){
         if(position == -1)
@@ -151,7 +188,7 @@ private:
         return false;
     }
 
-
+#ifdef _HANG_LINK
     void hang_the_item(const Hash_entry &e, int t = 1, int position = -1){
         if(position == -1)
             position = hash_value(e.key, t);
@@ -164,6 +201,7 @@ private:
         memcpy(current->key, e.key, KEY_LEN * sizeof(char));
         memcpy(current->value, e.value, VAL_LEN * sizeof(char));      
     }
+#endif
     
     bool remove_table(const char *key, int t, int position = -1){
         if(position == -1)
@@ -176,6 +214,7 @@ private:
         return false;
     }
 
+#ifdef _HANG_LINK
     bool remove_list(const char* key, int t=1, int position=-1){
         if(position==-1)
             position=hash_value(key,t);
@@ -195,19 +234,27 @@ private:
         }
         return false;
     }
+#endif
 
 public:
-    bool search(const char *key, char *value = NULL){
-        if(search_table(key, 0, value))
+    bool search(const char *key, char *value = NULL, const char *cover_value = NULL){
+        if(search_table(key, 0, value, -1, cover_value))
             return true;
 
         int position_tmp = hash_value(key,1);
-        if(search_table(key, 1, value, position_tmp) || search_list(key, 1, value, position_tmp))
+        if(search_table(key, 1, value, position_tmp, cover_value))
             return true;
+#ifdef _HANG_LINK
+        if(search_list(key, 1, value, position_tmp, cover_value))
+            return true;
+#endif
         return false;
     }
 
     bool insert(const Hash_entry &e){
+        if(search(e.key, NULL, e.value))
+            return true;
+
         if(insert_table(e, 0) || insert_table(e, 1))
             return true;
         int h[2];
@@ -222,8 +269,10 @@ public:
             e_tmp = table[t][h[t]];
             table[t][h[t]] = e_insert;
             e_insert = e_tmp;
-        }    
-        // hang_the_item(e_insert, 1);
+        }
+#ifdef _HANG_LINK 
+        hang_the_item(e_insert, 1);
+#endif
         return false;
     }
 
@@ -231,13 +280,26 @@ public:
         if(remove_table(key, 0))
             return true;
         int position_tmp = hash_value(key, 1);
-        if(remove_table(key, 1, position_tmp) || remove_list(key, 1, position_tmp))
+        if(remove_table(key, 1, position_tmp))
             return true;
+#ifdef _HANG_LINK
+        if(remove_list(key, 1, position_tmp))
+            return true;
+#endif
         return false;
     }
 
-// below are debug functions
 public:
+    double loadfactor(){
+        int full = 0;
+        for(int i = 0; i < 2; ++i)
+            for(int j = 0; j < size[i]; ++j)
+                full += table[i][j].flag;
+        return (double)full/(size[0] + size[1]);
+    }
+
+#ifdef _HANG_LINK
+// below are debug functions
     int max_link_length(){
         int ret = 0;
         for(int i = 0; i < size[1]; ++i){
@@ -264,9 +326,8 @@ public:
         }
         return ret;
     }
+#endif
 
 };
-
-
 
 #endif

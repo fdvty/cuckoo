@@ -3,7 +3,7 @@
 
 #include "utils.h"
 
-#define TEST_CUCKOO
+// #define TEST_CUCKOO
 
 const int CUCKOO_SIZE = KV_NUM;
 
@@ -66,7 +66,7 @@ int main(){
 
     create_kv();
     int count_fail = 0;
-    int stop = KV_NUM;
+    int stop = KV_NUM-1;
 
     timespec time1, time2;
     long long resns = 0;
@@ -92,7 +92,7 @@ int main(){
     resns += (long long)(time2.tv_sec - time1.tv_sec) * 1000000000LL + (time2.tv_nsec - time1.tv_nsec); // calculate time
     double insertMips = (double)1000.0 * (stop - tmp) / resns; // calculate time
 
-    double loadFactor = (double)(stop - FAIL_STOP)/CUCKOO_SIZE;
+    // double loadFactor = (double)(stop - FAIL_STOP)/CUCKOO_SIZE;
 
 
     resns = 0;
@@ -108,13 +108,14 @@ int main(){
 
     // assert(cntSearchFail == FAIL_STOP);
     printf("\n-----------------------result-----------------------\n");
-    printf("hash table size: %d, inserted item: %d\n", CUCKOO_SIZE, stop);
-    printf("load factor: %lf, insert MIPS: %lf, query MIPS: %lf\n", loadFactor, insertMips, queryMips);
+    printf("hash table size: %d, inserted item: %d\n", CUCKOO_SIZE, stop+1);
+    printf("load factor: %lf, insert MIPS: %lf, query MIPS: %lf\n", cuckoo.loadfactor(), insertMips, queryMips);
 
     printf("\n-----------------------debug-----------------------\n");
     printf("stop: %d, cntSearchFail: %d\n", stop, cntSearchFail);
+#ifdef _HANG_LINK
     printf("max link: %d, total link: %d\n", cuckoo.max_link_length(), cuckoo.total_link_length());
-
+#endif
     return 0;
 }
 #endif
