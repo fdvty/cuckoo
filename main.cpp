@@ -73,7 +73,8 @@ int main(){
 
     bool flag = 0;
     int tmp = 0;
-    int FAIL_STOP = 200;
+    int FAIL_STOP = CUCKOO_SIZE*0.0001;
+    printf("fail stop: %d\n", FAIL_STOP);
 
     for(int i = 0; i < KV_NUM; ++i){
         if(cuckoo.insert(kv[i]) == false)
@@ -81,7 +82,7 @@ int main(){
                 stop = i;
                 break;
             }
-        if(!flag && (double)i/CUCKOO_SIZE >= 0.9){
+        if(!flag && (double)i/CUCKOO_SIZE >= 0.0){
             flag = true;
             tmp = i;
             clock_gettime(CLOCK_MONOTONIC, &time1); // calculate time

@@ -12,7 +12,7 @@ using namespace std;
 
 
 
-#define KEY_LEN 4
+#define KEY_LEN 8
 #define VAL_LEN 8
 
 struct Hash_entry;
@@ -74,7 +74,7 @@ public:
         width[1] = 8;
         threshold = 15;
 
-        size[0] = capacity * 2.25 / (2.25 + 1);  
+        size[0] = capacity * 3 / (3 + 1);  
         size[1] = capacity - size[0];                           
         
         // initialize two sub-tables
@@ -108,36 +108,12 @@ public:
 
 private:
     int hash_value(const char* key, int t){
-        return MurmurHash3_x86_32(key, KEY_LEN, hashseed[t]) % size[t];
+        return MurmurHash3_x86_32(key, KEY_LEN, hashseed[t]) % (size[t] - width[t] + 1);
     }
 
-    bool search_table(const char* key, int t, char* value, int position = -1, const char* cover_value = NULL){
+    bool search_table(const char* key, int t, char* value = NULL, int position = -1, const char* cover_value = NULL){
         if(position == -1)
             position = hash_value(key, t);
-
-        // __attribute__((aligned(32))) char *tmp = new char[KEY_LEN*width[0]];
-        // for(int i = 0; i < width[t]; ++i)
-        //     memcpy(tmp+KEY_LEN*i, table[t][i+position].key, KEY_LEN*sizeof(char));
-        
-        // const __m256i item = _mm256_set1_epi32(*(int*)key);
-        // __m256i *keys_p = (__m256i *)(tmp);
-        // int matched = 0;
-
-        // __m256i a_comp = _mm256_cmpeq_epi32(item, keys_p[0]);
-        // matched = _mm256_movemask_ps((__m256)a_comp);
-
-        // if(matched != 0){
-        //     int matched_lowbit = matched & (-matched);
-        //     int matched_index = _mm_tzcnt_32((uint32_t)matched_lowbit);
-        //     if(cover_value != NULL)
-        //         memcpy(table[t][matched_index].value, cover_value, VAL_LEN*sizeof(char));
-        //     if(value != NULL)
-        //         memcpy(value, table[t][matched_index].value, VAL_LEN*sizeof(char));
-        //     return true;
-        // }
-
-        // return false;
-
 
         for(int i = position; i < position + width[t]; ++i)
             if(table[t][i].flag && memcmp(table[t][i].key, key, KEY_LEN*sizeof(char)) == 0){
@@ -240,7 +216,6 @@ public:
     bool search(const char *key, char *value = NULL, const char *cover_value = NULL){
         if(search_table(key, 0, value, -1, cover_value))
             return true;
-
         int position_tmp = hash_value(key,1);
         if(search_table(key, 1, value, position_tmp, cover_value))
             return true;
@@ -292,9 +267,13 @@ public:
 public:
     double loadfactor(){
         int full = 0;
-        for(int i = 0; i < 2; ++i)
+        for(int i = 0; i < 2; ++i){
+            int tmp = 0;
             for(int j = 0; j < size[i]; ++j)
-                full += table[i][j].flag;
+                tmp += table[i][j].flag;
+            full += tmp;
+            printf("table %d, load factor %lf\n", i, (double)tmp/size[i]);
+        }
         return (double)full/(size[0] + size[1]);
     }
 
