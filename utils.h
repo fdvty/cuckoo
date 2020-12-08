@@ -2,7 +2,7 @@
 
 const int KV_NUM = 10000000;
 
-Hash_entry kv[KV_NUM+10];
+CuckooEntry kv[KV_NUM+10];
 
 inline void random_string(char* str, const int len){
     for(int i = 0; i < len; ++i)
@@ -13,13 +13,8 @@ inline void random_string(char* str, const int len){
 void create_kv(){
     srand((uint32_t)time(0));
     for(int i = 0; i < KV_NUM; ++i){
-        // int t = i%(KV_NUM*95/100);
-        // int t = i;
-        // if(KEY_LEN == 4)
-        //     memcpy(kv[i].key, (const char*)&t, sizeof(char)*KEY_LEN);
-        //     // kv[i].key = *(const char*)(&i);
-        // else
-            random_string(kv[i].key, KEY_LEN);
-        random_string(kv[i].value, VAL_LEN);
+        random_string(kv[i].key, KEY_LEN);
+        double x = i+12;
+        memcpy(kv[i].value, (const char*)&x, VAL_LEN*sizeof(char));
     }
 }
