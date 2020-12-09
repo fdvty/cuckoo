@@ -27,7 +27,7 @@ int main(){
                 stop = i;
                 break;
             }
-        if(!flag && (double)i/CUCKOO_SIZE >= 0.0){
+        if(!flag && (double)i/CUCKOO_SIZE >= 0.9){
             flag = true;
             tmp = i;
             clock_gettime(CLOCK_MONOTONIC, &time1); // calculate time
@@ -52,7 +52,7 @@ int main(){
 
     printf("-----------------------result-----------------------\n");
     printf("hash table size: %d, inserted item: %d\n", CUCKOO_SIZE, stop+1);
-    printf("load factor: %lf, insert MIPS: %lf, query MIPS: %lf\n", cuckoo.loadfactor(), insertMips, queryMips);
+    printf("load factor: %lf, insert speed: %lfM/s, query speed: %lfM/s\n", cuckoo.loadfactor(), insertMips, queryMips);
 
     printf("-----------------------debug-----------------------\n");
     printf("stop: %d, cntSearchFail: %d\n", stop, cntSearchFail);
