@@ -13,8 +13,15 @@ inline void random_string(char* str, const int len){
 void create_kv(){
     srand((uint32_t)time(0));
     for(int i = 0; i < KV_NUM; ++i){
-        random_string(kv[i].key, KEY_LEN);
-        uint64_t x = 1;
-        memcpy(kv[i].value, (const char*)&x, VAL_LEN*sizeof(char));
+        random_string((char*)&kv[i].key, KEY_LEN);
+        kv[i].key &= 0x7fffffffffffffff;
+        kv[i].key += 1; 
+        kv[i].value = new uint64_t;
+        *kv[i].value = 1;
     }
+}
+
+void delete_kv(){
+    for(int i = 0; i < KV_NUM; ++i)
+        delete kv[i].value;
 }

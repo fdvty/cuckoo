@@ -9,6 +9,7 @@ const int CUCKOO_SIZE = KV_NUM;
 int main(){
     Cuckoo cuckoo(CUCKOO_SIZE);
 
+
     create_kv();
     int count_fail = 0;
     int stop = KV_NUM-1;
@@ -23,7 +24,7 @@ int main(){
     printf("fail stop: %d\n", FAIL_STOP);
 
     for(int i = 0; i < KV_NUM; ++i){
-        if(cuckoo.insert_general(kv[i]) == false)
+        if(cuckoo.insert_new(kv[i]) == false)
             if(++count_fail == FAIL_STOP){
                 stop = i;
                 break;
@@ -34,6 +35,7 @@ int main(){
             clock_gettime(CLOCK_MONOTONIC, &time1); // calculate time
         }
     }
+
     printf("stop: %d\n", stop);
 
     clock_gettime(CLOCK_MONOTONIC, &time2); // calculate time
@@ -45,8 +47,10 @@ int main(){
     clock_gettime(CLOCK_MONOTONIC, &time1); // calculate time
     for(int i = 0; i <= stop; ++i){
         // printf("%d\n",i);
-        if(cuckoo.query(kv[i].key) == false)
+        if(cuckoo.query(kv[i].key) == false){
             cntSearchFail++;
+            printf("fail id: %d\n", i);
+        }
     }
     clock_gettime(CLOCK_MONOTONIC, &time2); // calculate time
     resns += (long long)(time2.tv_sec - time1.tv_sec) * 1000000000LL + (time2.tv_nsec - time1.tv_nsec); // calculate time
@@ -58,5 +62,22 @@ int main(){
 
     printf("-----------------------debug-----------------------\n");
     printf("stop: %d, cntSearchFail: %d\n", stop, cntSearchFail);
+
+
+    for(int i = 0; i < stop; ++i){
+        cuckoo.insert_old(kv[i]);
+    }
+    uint64_t ret;
+    for(int i = 0; i <= stop; ++i){
+        if(cuckoo.query(kv[i].key, &ret) == false){
+            printf("query fail: %d\n", i);
+        }
+        else if(ret != 2){
+            exit(-1);
+        }
+    }
+
+
+    delete_kv();
     return 0;
 }
