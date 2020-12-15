@@ -19,10 +19,11 @@ int main(){
     bool flag = 0;
     int tmp = 0;
     int FAIL_STOP = CUCKOO_SIZE*0.00005;
+    FAIL_STOP = 1;
     printf("fail stop: %d\n", FAIL_STOP);
 
     for(int i = 0; i < KV_NUM; ++i){
-        if(cuckoo.insert(kv[i]) == false)
+        if(cuckoo.insert_general(kv[i]) == false)
             if(++count_fail == FAIL_STOP){
                 stop = i;
                 break;
@@ -33,7 +34,7 @@ int main(){
             clock_gettime(CLOCK_MONOTONIC, &time1); // calculate time
         }
     }
-
+    printf("stop: %d\n", stop);
 
     clock_gettime(CLOCK_MONOTONIC, &time2); // calculate time
     resns += (long long)(time2.tv_sec - time1.tv_sec) * 1000000000LL + (time2.tv_nsec - time1.tv_nsec); // calculate time
@@ -43,7 +44,8 @@ int main(){
     int cntSearchFail = 0;
     clock_gettime(CLOCK_MONOTONIC, &time1); // calculate time
     for(int i = 0; i <= stop; ++i){
-        if(cuckoo.search(kv[i].key) == false)
+        // printf("%d\n",i);
+        if(cuckoo.query(kv[i].key) == false)
             cntSearchFail++;
     }
     clock_gettime(CLOCK_MONOTONIC, &time2); // calculate time

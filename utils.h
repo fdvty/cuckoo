@@ -14,7 +14,7 @@ void create_kv(){
     srand((uint32_t)time(0));
     for(int i = 0; i < KV_NUM; ++i){
         random_string(kv[i].key, KEY_LEN);
-        double x = i+12;
+        uint64_t x = 1;
         memcpy(kv[i].value, (const char*)&x, VAL_LEN*sizeof(char));
     }
 }
