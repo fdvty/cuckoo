@@ -1,5 +1,5 @@
-#ifndef CUCKOO_H
-#define CUCKOO_H
+#ifndef _CUCKOO_H_
+#define _CUCKOO_H_
 
 #include <algorithm>
 #include <cstring>
@@ -59,7 +59,7 @@ private:
     CuckooEntry e_kick[MAX_THRESHOLD];
     uint32_t hash_kick[MAX_THRESHOLD];
 
-    uint32_t hashseed[2];
+    uint32_t hashseed[3];
 
 public:
     Cuckoo(int capacity){
@@ -77,7 +77,7 @@ public:
             memset(table[i], 0, sizeof(CuckooEntry)*size[i]);
         }
 
-        for(int i = 0; i < 2; ++i){
+        for(int i = 0; i < 3; ++i){
             uint32_t seed = rand()%MAX_PRIME32;
             hashseed[i] = seed;
         }
@@ -93,6 +93,10 @@ public:
 private:
     inline int hash_value(uint64_t key, int t){
         return MurmurHash3_x86_32((const char*)&key, KEY_LEN, hashseed[t]) % (size[t] - width[t] + 1);
+    }
+
+    inline int which_table(uint64_t key){
+        return ((MurmurHash3_x86_32((const char*)&key, KEY_LEN, hashseed[2])&0x3) == 0) ? 1 : 0;
     }
 
     inline bool query_table(uint64_t key, int t, uint64_t* ret_value = NULL, uint64_t delta = 0){
@@ -137,15 +141,15 @@ public:
         return false;
     }
 
-    // <uint64_t key, uint64_t* delta> 
-    bool insert_old(const CuckooEntry &e){
+    // uint64_t* delta (add *delta to existing value)
+    bool update_old(const CuckooEntry &e){
         h[0] = h[1] = -1;
         if(query_table(e.key, 0, NULL, *e.value) || query_table(e.key, 1, NULL, *e.value))
             return true;
         return false;
     }
 
-    // <uint64_t key, uint64_t* value> 
+    // uint64_t* value (store this pointer)
     bool insert_new(const CuckooEntry &e){
         h[0] = h[1] = -1;
         
@@ -178,9 +182,28 @@ public:
         return false;
     }
 
+    bool enforce_query(uint64_t key, uint64_t* ret_value = NULL){
+        int t = which_table(key);
+        h[t] = hash_value(key, t);
+        if(ret_value != NULL)
+            *ret_value = *table[t][h[t]].value;
+        return true;
+    }
+
+    bool enforce_update(const CuckooEntry& e){
+        int t = which_table(e.key);
+        h[t] = hash_value(e.key, t);
+        *table[t][h[t]].value += *e.value;
+        return true;
+    }
+
+    double loadFactor(){
+        return (double)count_item / (size[0] + size[1]);
+    }
+
 // debug functions 
 public:
-    double loadfactor(){
+    double print_loadfactor(){
         int full = 0;
         for(int i = 0; i < 2; ++i){
             int tmp = 0;
