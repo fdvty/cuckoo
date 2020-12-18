@@ -17,7 +17,7 @@ void create_kv(){
         kv[i].key &= 0x7fffffffffffffff;
         kv[i].key += 1; 
         kv[i].value = new uint64_t;
-        *kv[i].value = 1;
+        *kv[i].value = i;
     }
 }
 
