@@ -12,10 +12,11 @@ inline void random_string(char* str, const int len){
 
 void create_kv(){
     srand((uint32_t)time(0));
-    for(int i = 0; i < KV_NUM; ++i){
-        random_string((char*)&kv[i].key, KEY_LEN);
-        kv[i].key &= 0x7fffffffffffffff;
-        kv[i].key += 1; 
+    for(uint64_t i = 0; i < KV_NUM; ++i){
+        // random_string((char*)&kv[i].key, KEY_LEN);
+        // kv[i].key &= 0x7fffffffffffffff;
+        // kv[i].key += 1; 
+        kv[i].key = i+13;
         kv[i].value = new uint64_t;
         *kv[i].value = i;
     }

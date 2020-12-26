@@ -12,29 +12,38 @@ using namespace std;
 
 
 
+inline uint64_t simple_random(uint64_t x){
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	return x;
+}
+
 #define KEY_LEN 8
-#define VAL_LEN 8
-
-
 struct CuckooEntry{
     uint64_t key;
     uint64_t* value;
-    uint64_t freq; 
+    uint64_t votes;
 
     CuckooEntry(){
         key = 0;
         value = 0; 
-        freq = 0;   
+        votes = 0;
+    }
+    CuckooEntry(uint64_t _key, uint64_t* _value, uint64_t _votes){
+        key = _key;
+        value = _value;
+        votes = _votes;
     }
     CuckooEntry(const CuckooEntry& e){
         key = e.key;
         value = e.value;
-        freq = e.freq;
+        votes = e.votes;
     }
     CuckooEntry& operator=(const CuckooEntry& e){
         key = e.key;
         value = e.value;
-        freq = e.freq;
+        votes = e.votes;
         return *this;
     }
     bool operator==(const CuckooEntry& e){
@@ -47,27 +56,59 @@ struct CuckooEntry{
             return true;
         return false;
     }
-}empty_entry;
+}empty_entry; 
+
+#define BUCKET_SIZE 8
+
+struct CuckooBucket{
+    uint64_t keys[BUCKET_SIZE];
+    uint64_t* values[BUCKET_SIZE];
+    uint64_t posVotes[BUCKET_SIZE];
+    // uint64_t negVotes; 
+    uint64_t used; 
+
+    CuckooBucket(){
+        memset(keys, 0, sizeof(keys));
+        memset(values, 0, sizeof(values));
+        memset(posVotes, 0, sizeof(posVotes));
+        // negVotes = 0;
+        used = 0;
+    }
+
+    inline void bucket_set(const CuckooEntry& e, int i){
+        keys[i] = e.key;
+        values[i] = e.value;
+        posVotes[i] = e.votes;
+    }
+
+    inline CuckooEntry bucket_query(int i){
+        return CuckooEntry(keys[i], values[i], posVotes[i]);
+    }
+
+};
+
 
 #define MAX_THRESHOLD 100
 
 class Cuckoo{
 private:
-    CuckooEntry *table[2]; 
+    CuckooBucket *table[2]; 
     int size[2];            
     int width[2];           
     int threshold;  
     uint32_t count_item;         
 
-    CuckooEntry ev_kick[MAX_THRESHOLD];
-    uint32_t positionv_kick[MAX_THRESHOLD];
+    CuckooEntry vec_eKick[MAX_THRESHOLD];
+    uint32_t vec_pKick[MAX_THRESHOLD];
+    uint32_t vec_iKick[MAX_THRESHOLD];
 
-    int epoch_kick;
-    int t_kick;
-    int position_kick;
-    int min_freq;
+    int epochKick;
+    int tKick;
+    int pKick;
+    int iKick;
+    uint64_t minVotes;
 
-    uint32_t hashseed[2];
+    uint32_t pseed[2];
 
 public:
     Cuckoo(int capacity){
@@ -75,18 +116,20 @@ public:
         width[1] = 8;
         threshold = 25;
 
+        capacity = (capacity + BUCKET_SIZE - 1) / BUCKET_SIZE;
         size[0] = capacity * 3 / (3 + 1);  
         size[1] = capacity - size[0];                           
         
         count_item = 0;
 
-        table[0] = new CuckooEntry[size[0] + size[1]];
-        memset(table[0], 0, sizeof(CuckooEntry)*(size[0] + size[1]));
-        table[1] = table[0] + size[0];
+        for(int i = 0; i < 2; ++i){
+            table[i] = new CuckooBucket[size[i]];
+            memset(table[i], 0, sizeof(CuckooBucket)*size[i]);
+        }
 
         for(int i = 0; i < 2; ++i){
             uint32_t seed = rand()%MAX_PRIME32;
-            hashseed[i] = seed;
+            pseed[i] = seed;
         }
         assert(threshold < MAX_THRESHOLD);
     }
@@ -98,58 +141,63 @@ public:
 
 private:
     inline int hash_value(uint64_t key, int t){
-        return MurmurHash3_x86_32((const char*)&key, KEY_LEN, hashseed[t]) % (size[t] - width[t] + 1);
+        return MurmurHash3_x86_32((const char*)&key, KEY_LEN, pseed[t]) % size[t];
     }
 
-    inline bool query_table(uint64_t key, int t, uint64_t* ret_value = NULL){
-        int position = hash_value(key, t);
-        for(int i = position; i < position + width[t]; ++i)
-            if(table[t][i].key == key){
-                if(ret_value != NULL)
-                    *ret_value = *table[t][i].value;
-                table[t][i].freq++;
-                return true;
+    inline uint64_t* query_table(uint64_t key, int t){
+        int p = hash_value(key, t);
+        for(int i = 0; i < table[t][p].used; ++i){
+            if(table[t][p].keys[i] == key){
+                table[t][p].posVotes[i]++;
+                return table[t][p].values[i];
             }
-        return false;
+        }
+        return NULL;
     }
 
     inline bool update_table(uint64_t key, int t, uint64_t delta){
-        int position = hash_value(key, t);
-        for(int i = position; i < position + width[t]; ++i)
-            if(table[t][i].key == key){
+        int p = hash_value(key, t);
+        for(int i = 0; i < table[t][p].used; ++i)
+            if(table[t][p].keys[i] == key){
                 if(delta != 0)
-                    *table[t][i].value += delta; 
+                    *table[t][p].values[i] += delta; 
                 return true;
             }
         return false;
     }
 
 
-    inline bool insert_table(const CuckooEntry &e, int t, int position = -1, int epoch_now = 0){
-        if(position == -1)
-            position = hash_value(e.key, t);
-        for(int i = position; i < position + width[t]; ++i){
-            if(table[t][i] == empty_entry){
-                table[t][i] = e;
-                count_item++; 
-                return true;
-            }
-            if(table[t][i].freq < min_freq){
-                min_freq = table[t][i].freq;
-                epoch_kick = epoch_now;
-                t_kick = t;
-                position_kick = i;
+    inline bool insert_table(const CuckooEntry &e, int t, int p = -1, int epochNow = 0){
+        if(p == -1)
+            p = hash_value(e.key, t);
+        if(table[t][p].used < BUCKET_SIZE){
+            int used = table[t][p].used;
+            table[t][p].keys[used] = e.key;
+            table[t][p].values[used] = e.value;
+            table[t][p].used++;
+            count_item++;
+            return true;
+        }
+        for(int i = 0; i < BUCKET_SIZE; ++i){
+            if(table[t][p].posVotes[i] < minVotes || (table[t][p].posVotes[i] == minVotes && simple_random(e.key)%2 == 1)){
+            // if(table[t][p].posVotes[i] < minVotes){
+                minVotes = table[t][p].posVotes[i];
+                epochKick = epochNow;
+                tKick = t;
+                pKick = p;
+                iKick = i;
             }
         }
-
         return false;
     }
 
 public:
-    bool query(uint64_t key, uint64_t* ret_value = NULL){
-        if(query_table(key, 0, ret_value) || query_table(key, 1, ret_value))
-            return true;
-        return false;
+    // return NULL if fails
+    uint64_t* query(uint64_t key){
+        uint64_t* ret = query_table(key, 0);
+        if(ret == NULL)
+            ret = query_table(key, 1);
+        return ret;
     }
 
     // uint64_t* delta (add *delta to existing value)
@@ -160,84 +208,68 @@ public:
     }
 
     // uint64_t* value (store this pointer)
-    // 返回true说明插入成功，返回false说明替换出去了一个最频率小的
+    bool insert(const CuckooEntry &e){
+        int p = hash_value(e.key, 0);
 
-    // !!这里并没有对踢出去的KVpair的value指针做特殊处理（内存释放），实际应用时要做一些修改
-    bool insert(const CuckooEntry &e, uint64_t* ret_value = NULL){
-        min_freq = 0x3f3f3f3f;
+        minVotes = 0x3f3f3f3f3f3f3f3f;
 
-        int position = hash_value(e.key, 0);
-        if(insert_table(e, 0, position, 0) || insert_table(e, 1, -1, 0))
+        if(insert_table(e, 0, p, 0) || insert_table(e, 1, -1, 0))
             return true;
 
         CuckooEntry e_insert = e;
         CuckooEntry e_tmp;
 
-        int e_position = position;
+        int ep = p;
 
         for(int k = 0; k < threshold; ++k){
             int t = k%2;
             if(k != 0){
-                position = hash_value(e_insert.key, t);
-                if(insert_table(e_insert, t, position, k))
+                p = hash_value(e_insert.key, t);
+                if(insert_table(e_insert, t, p, k))
                     return true;
             }
-            e_tmp = table[t][position];  // k=0 时的postion上面已经算好
-            table[t][position] = e_insert;
+            int i = simple_random(e_insert.key)%BUCKET_SIZE;
+            e_tmp = table[t][p].bucket_query(i);
+            table[t][p].bucket_set(e_insert, i);
             e_insert = e_tmp;
 
-            positionv_kick[k] = position; // 这里记的是每一轮**被踢出去**的那个元素
-            ev_kick[k] = e_tmp;  //这里记得是每一轮被踢出去的那个元素的位置
+            vec_pKick[k] = p;
+            vec_iKick[k] = i;
+            vec_eKick[k] = e_tmp;
         }
     
 
-        for(int k = threshold-1; k > epoch_kick; --k){  // 把epoch_kick以后的表还原成插入之前的状态
+        for(int k = threshold-1; k > epochKick; --k){ 
             int t = k%2; 
-            table[t][positionv_kick[k]] = ev_kick[k];
+            table[t][vec_pKick[k]].bucket_set(vec_eKick[k], vec_iKick[k]);
         }
         CuckooEntry e_kick;
-        if(epoch_kick == 0 && t_kick == 1){ // 把第一轮的表也还原成插入之前的状态，把e插到table[1][position_kick]
-            table[0][positionv_kick[0]] = ev_kick[0];  
-            e_kick = table[t_kick][position_kick];
-            table[t_kick][position_kick] = e;
-            //* ****这之间是完成热启动的代码****
-            *table[t_kick][position_kick].value = *e_kick.value;
-            if(ret_value != NULL)
-                *ret_value = *e_kick.value;
-            //*
+        if(epochKick == 0 && tKick == 1){ 
+            table[0][vec_pKick[0]].bucket_set(vec_eKick[0], vec_iKick[0]);
+            // e_kick = table[tKick][pKick].bucket_query(iKick);
+            table[tKick][pKick].bucket_set(e, iKick);
             return false;
         }
 
-        if(positionv_kick[epoch_kick] == position_kick){ // 正好把频率最小的踢出去了
-            e_kick = ev_kick[epoch_kick];
-            //* ****这之间是完成热启动的代码****
-            *table[0][e_position].value = *e_kick.value;
-            if(ret_value != NULL)
-                *ret_value = *e_kick.value;
-            //*
+        else if(iKick == vec_iKick[epochKick]){ 
+            // e_kick = table[tKick][pKick].bucket_query(iKick);
             return false;
         } 
-        else{  // 应该把epoch_kick这轮被踢出的元素还原，并把上一轮被踢出的元素插入到table[epoch_kick][position_kick]
-            // t_kick等于epoch_kick%2
-            table[t_kick][positionv_kick[epoch_kick]] = ev_kick[epoch_kick]; 
-            e_kick = table[t_kick][position_kick];
-            CuckooEntry e_last; //上一轮被踢出的元素
-            if(epoch_kick > 0)
-                e_last = ev_kick[epoch_kick-1];
-            else // epoch_kick=0时，上一轮被踢出的元素可以视为e
+        else{  // 't_kick' is equal to 'epoch_kick%2'
+            table[tKick][vec_pKick[epochKick]].bucket_set(vec_eKick[epochKick], vec_iKick[epochKick]);
+            // e_kick = table[tKick][pKick].bucket_query(iKick);
+            CuckooEntry e_last;
+            if(epochKick > 0)
+                e_last = vec_eKick[epochKick-1];
+            else 
                 e_last = e;
-            table[t_kick][position_kick] = e_last;
-            //* ****这之间是完成热启动的代码****
-            *table[t_kick][position_kick].value = *e_kick.value;
-            if(ret_value != NULL)
-                *ret_value = *e_kick.value;
-            //*
+            table[tKick][pKick].bucket_set(e_last, iKick);
             return false;
         }
     }
 
     double loadFactor(){
-        return (double)count_item / (size[0] + size[1]);
+        return (double)count_item / ((size[0] + size[1])*BUCKET_SIZE);
     }
 
 // debug functions 
@@ -247,21 +279,24 @@ public:
         for(int i = 0; i < 2; ++i){
             int tmp = 0;
             for(int j = 0; j < size[i]; ++j)
-                if(table[i][j] != empty_entry)
-                    tmp += 1;
+                tmp += table[i][j].used;
             full += tmp;
-            printf("table %d, load factor %lf\n", i, (double)tmp/size[i]);
+            printf("table %d, load factor %lf\n", i, (double)tmp/(size[i]*BUCKET_SIZE));
         }
         assert(full == count_item);
         return (double)full/(size[0] + size[1]);
     }
 
-    void print_freq_sum(){
-        int ctt = 0;
-        for(int i = 0; i < 2; ++i)
-            for(int j = 0; j < size[i]; ++j)
-                ctt += table[i][j].freq;
-        printf("freq_sum: %d\n", ctt);
+    uint64_t print_posVoteSum(){
+        uint64_t ret = 0;
+        for(int i = 0; i < 2; ++i){
+            for(int j = 0; j < size[i]; ++j){
+                for(int k = 0; k < table[i][j].used; ++k)
+                    ret += table[i][j].posVotes[k];
+            }
+        }
+        printf("posVoteSum: %llu\n", ret);
+        return ret;
     }
 };
 
