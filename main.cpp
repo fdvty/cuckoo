@@ -141,12 +141,12 @@ int main(){
     printf("stop: %d, cntSearchFail: %d\n", stop, cntSearchFail);
 
     int avoid_o2 = 0;
-    for(int iter = 0; iter < 5; ++iter){
-        for(int i = CUCKOO_SIZE/2; i <= CUCKOO_SIZE; i++){
-            if(cuckoo.query(kv[i].key) == NULL)
-                avoid_o2++;
-        }
-    }
+    // for(int iter = 0; iter < 5; ++iter){
+    //     for(int i = CUCKOO_SIZE/2; i <= CUCKOO_SIZE; i++){
+    //         if(cuckoo.query(kv[i].key) == NULL)
+    //             avoid_o2++;
+    //     }
+    // }
 
 
     cuckoo.print_posVoteSum();

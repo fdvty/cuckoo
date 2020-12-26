@@ -64,14 +64,14 @@ struct CuckooBucket{
     uint64_t keys[BUCKET_SIZE];
     uint64_t* values[BUCKET_SIZE];
     uint64_t posVotes[BUCKET_SIZE];
-    // uint64_t negVotes; 
+    uint64_t negVotes; 
     uint64_t used; 
 
     CuckooBucket(){
         memset(keys, 0, sizeof(keys));
         memset(values, 0, sizeof(values));
         memset(posVotes, 0, sizeof(posVotes));
-        // negVotes = 0;
+        negVotes = 0;
         used = 0;
     }
 
@@ -114,7 +114,7 @@ public:
     Cuckoo(int capacity){
         width[0] = 8;
         width[1] = 8;
-        threshold = 25;
+        threshold = 5;
 
         capacity = (capacity + BUCKET_SIZE - 1) / BUCKET_SIZE;
         size[0] = capacity * 3 / (3 + 1);  
@@ -152,6 +152,7 @@ private:
                 return table[t][p].values[i];
             }
         }
+        table[t][p].negVotes++;
         return NULL;
     }
 
@@ -179,6 +180,12 @@ private:
             return true;
         }
         for(int i = 0; i < BUCKET_SIZE; ++i){
+            if(table[t][p].posVotes[i] < table[t][p].negVotes){
+                table[t][p].bucket_set(e, i);
+                table[t][p].posVotes[i] = table[t][p].negVotes/2;
+                table[t][p].negVotes = 0;
+                return true;
+            }
             if(table[t][p].posVotes[i] < minVotes || (table[t][p].posVotes[i] == minVotes && simple_random(e.key)%2 == 1)){
             // if(table[t][p].posVotes[i] < minVotes){
                 minVotes = table[t][p].posVotes[i];
@@ -229,6 +236,7 @@ public:
                     return true;
             }
             int i = simple_random(e_insert.key)%BUCKET_SIZE;
+            // int i = rand()%BUCKET_SIZE;
             e_tmp = table[t][p].bucket_query(i);
             table[t][p].bucket_set(e_insert, i);
             e_insert = e_tmp;
@@ -284,7 +292,7 @@ public:
             printf("table %d, load factor %lf\n", i, (double)tmp/(size[i]*BUCKET_SIZE));
         }
         assert(full == count_item);
-        return (double)full/(size[0] + size[1]);
+        return (double)full/((size[0] + size[1])*BUCKET_SIZE);
     }
 
     uint64_t print_posVoteSum(){
