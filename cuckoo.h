@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstring>
 #include <string>
+#include <cmath>
 #include "murmur3.h"
 #include <cassert>
 #include "immintrin.h"
@@ -75,10 +76,12 @@ struct CuckooBucket{
         used = 0;
     }
 
-    inline void bucket_set(const CuckooEntry& e, int i){
+    inline void bucket_set(const CuckooEntry& e, int i, bool clearNeg = false){
         keys[i] = e.key;
         values[i] = e.value;
         posVotes[i] = e.votes;
+        if(clearNeg)
+            negVotes = 0;
     }
 
     inline CuckooEntry bucket_query(int i){
@@ -173,8 +176,7 @@ private:
             p = hash_value(e.key, t);
         if(table[t][p].used < BUCKET_SIZE){
             int used = table[t][p].used;
-            table[t][p].keys[used] = e.key;
-            table[t][p].values[used] = e.value;
+            table[t][p].bucket_set(e, used, true); // or only true if: epochNow==0
             table[t][p].used++;
             count_item++;
             return true;
@@ -198,6 +200,8 @@ private:
         return false;
     }
 
+
+
 public:
     // return NULL if fails
     uint64_t* query(uint64_t key){
@@ -215,7 +219,8 @@ public:
     }
 
     // uint64_t* value (store this pointer)
-    bool insert(const CuckooEntry &e){
+    bool insert(CuckooEntry e){
+        e.votes = 1;
         int p = hash_value(e.key, 0);
 
         minVotes = 0x3f3f3f3f3f3f3f3f;
@@ -232,8 +237,10 @@ public:
             int t = k%2;
             if(k != 0){
                 p = hash_value(e_insert.key, t);
-                if(insert_table(e_insert, t, p, k))
+                if(insert_table(e_insert, t, p, k)){
+                    table[0][vec_pKick[0]].negVotes = 0;
                     return true;
+                }
             }
             int i = simple_random(e_insert.key)%BUCKET_SIZE;
             // int i = rand()%BUCKET_SIZE;
@@ -255,13 +262,12 @@ public:
         if(epochKick == 0 && tKick == 1){ 
             table[0][vec_pKick[0]].bucket_set(vec_eKick[0], vec_iKick[0]);
             // e_kick = table[tKick][pKick].bucket_query(iKick);
-            table[tKick][pKick].bucket_set(e, iKick);
-            return false;
+            table[tKick][pKick].bucket_set(e, iKick, true); //
         }
 
         else if(iKick == vec_iKick[epochKick]){ 
             // e_kick = table[tKick][pKick].bucket_query(iKick);
-            return false;
+            table[0][vec_pKick[0]].negVotes = 0; //
         } 
         else{  // 't_kick' is equal to 'epoch_kick%2'
             table[tKick][vec_pKick[epochKick]].bucket_set(vec_eKick[epochKick], vec_iKick[epochKick]);
@@ -272,8 +278,9 @@ public:
             else 
                 e_last = e;
             table[tKick][pKick].bucket_set(e_last, iKick);
-            return false;
+            table[0][vec_pKick[0]].negVotes = 0; //
         }
+        return false;
     }
 
     double loadFactor(){
