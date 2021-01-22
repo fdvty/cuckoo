@@ -260,7 +260,7 @@ public:
             }
         }
         if(table[p].negVotes > minPosVotes){
-            e.votes = 0;
+            e.votes = 1;
             table[p].bucket_set(e, minPos, true);
             return true;
         }
