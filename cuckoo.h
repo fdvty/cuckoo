@@ -20,6 +20,21 @@ inline uint64_t simple_random(uint64_t x){
 	return x;
 }
 
+inline void set_flag(uint64_t& x, int t){
+    x |= (1 << t);
+}
+
+inline int query_flag(uint64_t x){
+    for(int i = 0; i < 64; ++i){
+        if((x&1) == 1)
+            return i;
+        x >>= 1;
+    }
+    return -1;
+}
+
+
+
 #define KEY_LEN 8
 struct CuckooEntry{
     uint64_t key;
@@ -59,7 +74,7 @@ struct CuckooEntry{
     }
 }empty_entry; 
 
-#define BUCKET_SIZE 8
+#define BUCKET_SIZE 4
 
 struct CuckooBucket{
     uint64_t keys[BUCKET_SIZE];
@@ -67,6 +82,7 @@ struct CuckooBucket{
     uint64_t posVotes[BUCKET_SIZE];
     uint64_t negVotes; 
     uint64_t used; 
+    uint64_t kingFlag;
 
     CuckooBucket(){
         memset(keys, 0, sizeof(keys));
@@ -74,6 +90,7 @@ struct CuckooBucket{
         memset(posVotes, 0, sizeof(posVotes));
         negVotes = 0;
         used = 0;
+        kingFlag = 0;
     }
 
     inline void bucket_set(const CuckooEntry& e, int i, bool clearNeg = false){
@@ -93,42 +110,29 @@ struct CuckooBucket{
 
 #define MAX_THRESHOLD 100
 
+#define KING_THRESHOLD 10000
+
 class Cuckoo{
 private:
-    CuckooBucket *table[2]; 
-    int size[2];            
-    int width[2];           
+    CuckooBucket *table;                   
     int threshold;  
-    uint32_t count_item;         
+    uint32_t count_item;   
+    int capacity;      
 
     CuckooEntry vec_eKick[MAX_THRESHOLD];
     uint32_t vec_pKick[MAX_THRESHOLD];
     uint32_t vec_iKick[MAX_THRESHOLD];
 
-    int epochKick;
-    int tKick;
-    int pKick;
-    int iKick;
-    uint64_t minVotes;
-
     uint32_t pseed[2];
 
 public:
-    Cuckoo(int capacity){
-        width[0] = 8;
-        width[1] = 8;
-        threshold = 5;
-
-        capacity = (capacity + BUCKET_SIZE - 1) / BUCKET_SIZE;
-        size[0] = capacity * 3 / (3 + 1);  
-        size[1] = capacity - size[0];                           
-        
+    Cuckoo(int size){
+        threshold = 25;
+        capacity = (size + BUCKET_SIZE - 1) / BUCKET_SIZE;                      
         count_item = 0;
 
-        for(int i = 0; i < 2; ++i){
-            table[i] = new CuckooBucket[size[i]];
-            memset(table[i], 0, sizeof(CuckooBucket)*size[i]);
-        }
+        table = new CuckooBucket[capacity];
+        memset(table, 0, sizeof(CuckooBucket)*capacity);
 
         for(int i = 0; i < 2; ++i){
             uint32_t seed = rand()%MAX_PRIME32;
@@ -138,64 +142,50 @@ public:
     }
 
     ~Cuckoo(){
-        delete [] table[0];
+        delete [] table;
     }
 
 
 private:
     inline int hash_value(uint64_t key, int t){
-        return MurmurHash3_x86_32((const char*)&key, KEY_LEN, pseed[t]) % size[t];
+        return MurmurHash3_x86_32((const char*)&key, KEY_LEN, pseed[t]) % capacity;
     }
 
     inline uint64_t* query_table(uint64_t key, int t){
         int p = hash_value(key, t);
-        for(int i = 0; i < table[t][p].used; ++i){
-            if(table[t][p].keys[i] == key){
-                table[t][p].posVotes[i]++;
-                return table[t][p].values[i];
+        for(int i = 0; i < table[p].used; ++i){
+            if(table[p].keys[i] == key){
+                table[p].posVotes[i]++;
+                if(table[p].kingFlag == 0 && table[p].posVotes[i] > KING_THRESHOLD)
+                    set_flag(table[p].kingFlag, i);
+                return table[p].values[i];
             }
         }
-        table[t][p].negVotes++;
+        table[p].negVotes++;
         return NULL;
     }
 
     inline bool update_table(uint64_t key, int t, uint64_t delta){
         int p = hash_value(key, t);
-        for(int i = 0; i < table[t][p].used; ++i)
-            if(table[t][p].keys[i] == key){
+        for(int i = 0; i < table[p].used; ++i)
+            if(table[p].keys[i] == key){
                 if(delta != 0)
-                    *table[t][p].values[i] += delta; 
+                    *table[p].values[i] += delta; 
                 return true;
             }
         return false;
     }
 
 
-    inline bool insert_table(const CuckooEntry &e, int t, int p = -1, int epochNow = 0){
+    inline bool insert_table(const CuckooEntry &e, int t, int p = -1){
         if(p == -1)
             p = hash_value(e.key, t);
-        if(table[t][p].used < BUCKET_SIZE){
-            int used = table[t][p].used;
-            table[t][p].bucket_set(e, used, true); // or only true if: epochNow==0
-            table[t][p].used++;
+        if(table[p].used < BUCKET_SIZE){
+            int used = table[p].used;
+            table[p].bucket_set(e, used, true); // or only true if: epochNow==0
+            table[p].used++;
             count_item++;
             return true;
-        }
-        for(int i = 0; i < BUCKET_SIZE; ++i){
-            if(table[t][p].posVotes[i] < table[t][p].negVotes){
-                table[t][p].bucket_set(e, i);
-                table[t][p].posVotes[i] = table[t][p].negVotes/2;
-                table[t][p].negVotes = 0;
-                return true;
-            }
-            if(table[t][p].posVotes[i] < minVotes || (table[t][p].posVotes[i] == minVotes && simple_random(e.key)%2 == 1)){
-            // if(table[t][p].posVotes[i] < minVotes){
-                minVotes = table[t][p].posVotes[i];
-                epochKick = epochNow;
-                tKick = t;
-                pKick = p;
-                iKick = i;
-            }
         }
         return false;
     }
@@ -204,7 +194,7 @@ private:
 
 public:
     // return NULL if fails
-    uint64_t* query(uint64_t key){
+    uint64_t* cuckoo_query(uint64_t key){
         uint64_t* ret = query_table(key, 0);
         if(ret == NULL)
             ret = query_table(key, 1);
@@ -212,103 +202,108 @@ public:
     }
 
     // uint64_t* delta (add *delta to existing value)
-    bool SGD_update(const CuckooEntry &e){
+    bool cuckoo_update(const CuckooEntry &e){
         if(update_table(e.key, 0, *e.value) || update_table(e.key, 1, *e.value))
             return true;
         return false;
     }
 
     // uint64_t* value (store this pointer)
-    bool insert(CuckooEntry e){
-        e.votes = 1;
+    bool cuckoo_insert(CuckooEntry e){
         int p = hash_value(e.key, 0);
 
-        minVotes = 0x3f3f3f3f3f3f3f3f;
-
-        if(insert_table(e, 0, p, 0) || insert_table(e, 1, -1, 0))
+        if(insert_table(e, 0, p) || insert_table(e, 1, -1))
             return true;
 
         CuckooEntry e_insert = e;
         CuckooEntry e_tmp;
 
-        int ep = p;
-
         for(int k = 0; k < threshold; ++k){
             int t = k%2;
             if(k != 0){
                 p = hash_value(e_insert.key, t);
-                if(insert_table(e_insert, t, p, k)){
-                    table[0][vec_pKick[0]].negVotes = 0;
+                if(insert_table(e_insert, t, p))
                     return true;
-                }
             }
             int i = simple_random(e_insert.key)%BUCKET_SIZE;
             // int i = rand()%BUCKET_SIZE;
-            e_tmp = table[t][p].bucket_query(i);
-            table[t][p].bucket_set(e_insert, i);
+            e_tmp = table[p].bucket_query(i);
+            table[p].bucket_set(e_insert, i);
             e_insert = e_tmp;
 
             vec_pKick[k] = p;
             vec_iKick[k] = i;
             vec_eKick[k] = e_tmp;
         }
-    
 
-        for(int k = threshold-1; k > epochKick; --k){ 
+        for(int k = threshold-1; k >= 0; --k){ 
             int t = k%2; 
-            table[t][vec_pKick[k]].bucket_set(vec_eKick[k], vec_iKick[k]);
-        }
-        CuckooEntry e_kick;
-        if(epochKick == 0 && tKick == 1){ 
-            table[0][vec_pKick[0]].bucket_set(vec_eKick[0], vec_iKick[0]);
-            // e_kick = table[tKick][pKick].bucket_query(iKick);
-            table[tKick][pKick].bucket_set(e, iKick, true); //
+            table[vec_pKick[k]].bucket_set(vec_eKick[k], vec_iKick[k]);
         }
 
-        else if(iKick == vec_iKick[epochKick]){ 
-            // e_kick = table[tKick][pKick].bucket_query(iKick);
-            table[0][vec_pKick[0]].negVotes = 0; //
-        } 
-        else{  // 't_kick' is equal to 'epoch_kick%2'
-            table[tKick][vec_pKick[epochKick]].bucket_set(vec_eKick[epochKick], vec_iKick[epochKick]);
-            // e_kick = table[tKick][pKick].bucket_query(iKick);
-            CuckooEntry e_last;
-            if(epochKick > 0)
-                e_last = vec_eKick[epochKick-1];
-            else 
-                e_last = e;
-            table[tKick][pKick].bucket_set(e_last, iKick);
-            table[0][vec_pKick[0]].negVotes = 0; //
+        return false;
+    }
+
+    bool elastic_insert(CuckooEntry e, bool cuckoo_fail = false){
+        int p = hash_value(e.key, 0);
+        
+        if(!cuckoo_fail)
+            if(insert_table(e, 0, p) || insert_table(e, 1, -1))
+                return true;
+        
+        int minPosVotes = 0x3f3f3f3f;
+        int minPos = -1;
+        for(int i = 0; i < BUCKET_SIZE; ++i){
+            if(table[p].posVotes[i] < minPosVotes && (((table[p].kingFlag >> i)&1) == 0) ){
+                minPosVotes = table[p].posVotes[i];
+                minPos = i;
+            }
+        }
+        if(table[p].negVotes > minPosVotes){
+            e.votes = 0;
+            table[p].bucket_set(e, minPos, true);
+            return true;
         }
         return false;
     }
 
+    uint64_t* elastic_query(CuckooEntry e){
+        int p = hash_value(e.key, 0);
+        if(table[p].kingFlag == 0)
+            return NULL;
+        int pos = query_flag(table[p].kingFlag);
+        return table[p].values[pos];
+    }
+
+    bool elastic_update(uint64_t key, uint64_t delta){
+        int p = hash_value(key, 0);
+        int pos = query_flag(table[p].kingFlag);
+        *table[p].values[pos] += delta;
+        return true;
+    }
+
+
     double loadFactor(){
-        return (double)count_item / ((size[0] + size[1])*BUCKET_SIZE);
+        return (double)count_item / (capacity *BUCKET_SIZE);
     }
 
 // debug functions 
 public:
     double print_loadfactor(){
         int full = 0;
-        for(int i = 0; i < 2; ++i){
-            int tmp = 0;
-            for(int j = 0; j < size[i]; ++j)
-                tmp += table[i][j].used;
-            full += tmp;
-            printf("table %d, load factor %lf\n", i, (double)tmp/(size[i]*BUCKET_SIZE));
-        }
+        for(int j = 0; j < capacity; ++j)
+            full += table[j].used;
         assert(full == count_item);
-        return (double)full/((size[0] + size[1])*BUCKET_SIZE);
+        double lf = (double)count_item/(capacity*BUCKET_SIZE); 
+        printf("load factor %lf\n", lf);
+        return lf;
     }
 
     uint64_t print_posVoteSum(){
         uint64_t ret = 0;
-        for(int i = 0; i < 2; ++i){
-            for(int j = 0; j < size[i]; ++j){
-                for(int k = 0; k < table[i][j].used; ++k)
-                    ret += table[i][j].posVotes[k];
-            }
+        for(int j = 0; j < capacity; ++j){
+            for(int k = 0; k < table[j].used; ++k)
+                ret += table[j].posVotes[k];
         }
         printf("posVoteSum: %llu\n", ret);
         return ret;
